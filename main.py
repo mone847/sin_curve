@@ -117,7 +117,7 @@ def on_mousemove(event):
     dy = current_y - start_mouse_y  # 下方向が正
 
     # 感度調整用スケール（適宜調整）
-    scale = 0.050
+    scale = 0.025
 
     # 上にドラッグ（dy < 0）で freq_factor を大きく、下にドラッグ（dy > 0）で小さく
     new_factor = start_freq_factor * (1.0 + -dy * scale)
@@ -154,3 +154,4 @@ def init():
 
 
 init()
+
