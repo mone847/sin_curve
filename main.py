@@ -15,9 +15,19 @@ vh = off_canvas.height     # 400
 view_w = view_canvas.width
 view_h = view_canvas.height
 
-# ===== 仮想キャンバスに sin カーブを描画（1回だけ） =====
+# ===== 周波数関連のパラメータ =====
+base_cycles = 4.0          # 基本の周期数（初期状態で 4 周期）
+freq_factor = 1.0          # 周波数倍率（1.0 が基準）
+
+# ===== スクロール状態管理 =====
+scroll_x = 0
+is_dragging = False
+last_mouse_x = 0
+start_mouse_y = 0
+start_freq_factor = 1.0
 
 def draw_offscreen():
+    """現在の freq_factor を使って仮想キャンバスに sin カーブを描く"""
     # 背景
     off_ctx.fillStyle = "white"
     off_ctx.fillRect(0, 0, vw, vh)
@@ -45,7 +55,8 @@ def draw_offscreen():
     off_ctx.beginPath()
 
     x_min = 0.0
-    x_max = 4 * math.pi
+    # freq_factor をかけて周期数を変える
+    x_max = base_cycles * freq_factor * math.pi * 2.0
 
     for i in range(vw + 1):
         t = i / vw
@@ -62,12 +73,8 @@ def draw_offscreen():
 
     off_ctx.stroke()
 
-# ===== スクロール状態管理 =====
-scroll_x = 0
-is_dragging = False
-last_mouse_x = 0
-
-def redraw():
+def redraw_view():
+    """現在の scroll_x に基づいて物理キャンバスに転送"""
     global scroll_x
 
     # 範囲チェック
@@ -86,23 +93,46 @@ def redraw():
 
 # ===== マウスイベント =====
 def on_mousedown(event):
-    global is_dragging, last_mouse_x
+    global is_dragging, last_mouse_x, start_mouse_y, start_freq_factor
     is_dragging = True
-    last_mouse_x = event.offsetX  # キャンバス内の X 座標
+    last_mouse_x = event.offsetX
+    start_mouse_y = event.offsetY
+    start_freq_factor = freq_factor
 
 def on_mousemove(event):
-    global is_dragging, last_mouse_x, scroll_x
+    global is_dragging, last_mouse_x, scroll_x, freq_factor
+
     if not is_dragging:
         return
 
     current_x = event.offsetX
-    dx = current_x - last_mouse_x
+    current_y = event.offsetY
 
-    # 右ドラッグで右方向を見るように
+    # 左右ドラッグ → スクロール
+    dx = current_x - last_mouse_x
     scroll_x -= dx
     last_mouse_x = current_x
 
-    redraw()
+    # 上下ドラッグ → 周期変更（上: 周波数アップ、下: ダウン）
+    dy = current_y - start_mouse_y  # 下方向が正
+
+    # 感度調整用スケール（適宜調整）
+    scale = 0.005
+
+    # 上にドラッグ（dy < 0）で freq_factor を大きく、下にドラッグ（dy > 0）で小さく
+    new_factor = start_freq_factor * (1.0 + -dy * scale)
+
+    # 負やゼロにならないようにクリップ
+    if new_factor < 0.2:
+        new_factor = 0.2
+    if new_factor > 5.0:
+        new_factor = 5.0
+
+    freq_factor = new_factor
+
+    # 周波数が変わったので、オフスクリーンを描き直してからビューを更新
+    draw_offscreen()
+    redraw_view()
 
 def on_mouseup(event):
     global is_dragging
@@ -115,13 +145,11 @@ def on_mouseleave(event):
 # ===== 初期化処理 =====
 def init():
     draw_offscreen()
-    redraw()
+    redraw_view()
 
-    # wrappers.add_event_listener を使うと create_proxy を意識せずに済む
     add_event_listener(view_canvas, "mousedown", on_mousedown)
     add_event_listener(view_canvas, "mousemove", on_mousemove)
     add_event_listener(view_canvas, "mouseup", on_mouseup)
     add_event_listener(view_canvas, "mouseleave", on_mouseleave)
 
-# スクリプト読み込み時に初期化
 init()
