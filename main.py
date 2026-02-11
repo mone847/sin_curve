@@ -16,7 +16,7 @@ view_w = view_canvas.width
 view_h = view_canvas.height
 
 # ===== 周波数関連のパラメータ =====
-base_cycles = 4.0          # 基本の周期数（初期状態で 4 周期）
+base_cycles = 4.0          # 基本の周期数
 freq_factor = 1.0          # 周波数倍率（1.0 が基準）
 
 # ===== スクロール状態管理 =====
@@ -91,7 +91,7 @@ def redraw_view():
         0, 0, view_w, view_h       # 表示側
     )
 
-# ===== マウスイベント =====
+# ===== マウスドラッグによるスクロール＆周期変更 =====
 def on_mousedown(event):
     global is_dragging, last_mouse_x, start_mouse_y, start_freq_factor
     is_dragging = True
@@ -113,16 +113,15 @@ def on_mousemove(event):
     scroll_x -= dx
     last_mouse_x = current_x
 
-    # 上下ドラッグ → 周期変更（上: 周波数アップ、下: ダウン）
+    # 上下ドラッグ → 周期変更
     dy = current_y - start_mouse_y  # 下方向が正
 
-    # 感度調整用スケール（適宜調整）
+    # 感度調整
     scale = 0.0125
 
-    # 上にドラッグ（dy < 0）で freq_factor を大きく、下にドラッグ（dy > 0）で小さく
     new_factor = start_freq_factor * (1.0 + -dy * scale)
 
-    # 負やゼロにならないようにクリップ
+    # クリップ
     if new_factor < 0.2:
         new_factor = 0.2
     if new_factor > 5.0:
@@ -130,7 +129,6 @@ def on_mousemove(event):
 
     freq_factor = new_factor
 
-    # 周波数が変わったので、オフスクリーンを描き直してからビューを更新
     draw_offscreen()
     redraw_view()
 
@@ -142,6 +140,34 @@ def on_mouseleave(event):
     global is_dragging
     is_dragging = False
 
+# ===== ホイールでの周期変更 =====
+def on_wheel(event):
+    global freq_factor
+
+    # ページのスクロールを抑止
+    event.preventDefault()
+
+    # event.deltaY > 0 なら「下に」スクロール（一般的なマウス）[web:86][web:92]
+    # 符号を反転して「上スクロールで周波数アップ」にする
+    delta = -event.deltaY
+
+    # 感度調整
+    wheel_scale = 0.001
+
+    # delta が正なら freq_factor を増やす、負なら減らす
+    new_factor = freq_factor * (1.0 + delta * wheel_scale)
+
+    # クリップ
+    if new_factor < 0.2:
+        new_factor = 0.2
+    if new_factor > 5.0:
+        new_factor = 5.0
+
+    freq_factor = new_factor
+
+    draw_offscreen()
+    redraw_view()
+
 # ===== 初期化処理 =====
 def init():
     draw_offscreen()
@@ -152,7 +178,7 @@ def init():
     add_event_listener(view_canvas, "mouseup", on_mouseup)
     add_event_listener(view_canvas, "mouseleave", on_mouseleave)
 
+    # wheel イベントをキャンバスに登録（パッシブ false にして preventDefault を効かせる）[web:86][web:92]
+    add_event_listener(view_canvas, "wheel", on_wheel, options={"passive": False})
 
 init()
-
-
