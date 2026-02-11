@@ -1,27 +1,28 @@
 import math
-from js import document
+from js import document, window
+from pyodide import create_proxy
 
-# 仮想キャンバス（大きな領域）
+# ===== キャンバス取得 =====
 off_canvas = document.getElementById("offscreen")
 off_ctx = off_canvas.getContext("2d")
 
-# 物理キャンバス（表示領域）
 view_canvas = document.getElementById("view")
 view_ctx = view_canvas.getContext("2d")
 
-# 仮想キャンバスのサイズ
 vw = off_canvas.width      # 4000
 vh = off_canvas.height     # 400
 
-# 背景を白で塗る
+# ===== 仮想キャンバスに sin カーブを描画（1回だけ） =====
+
+# 背景
 off_ctx.fillStyle = "white"
 off_ctx.fillRect(0, 0, vw, vh)
 
-# 軸の描画
+# 軸
 off_ctx.strokeStyle = "#cccccc"
 off_ctx.lineWidth = 1
 
-# x 軸（中央）
+# x 軸
 off_ctx.beginPath()
 off_ctx.moveTo(0, vh / 2)
 off_ctx.lineTo(vw, vh / 2)
@@ -33,25 +34,22 @@ off_ctx.moveTo(0, 0)
 off_ctx.lineTo(0, vh)
 off_ctx.stroke()
 
-# sin カーブを仮想キャンバスに描画
+# sin カーブ
 off_ctx.strokeStyle = "blue"
 off_ctx.lineWidth = 2
 
 off_ctx.beginPath()
 
-# x: 0〜 4π を 0〜vw に対応させる例
 x_min = 0.0
 x_max = 4 * math.pi
 
 for i in range(vw + 1):
-    # キャンバス座標 → 数学座標
     t = i / vw
     x = x_min + (x_max - x_min) * t
     y = math.sin(x)
 
-    # y = -1〜1 を キャンバス高さに変換（中央が 0）
     canvas_x = i
-    canvas_y = vh / 2 - y * (vh / 2 - 20)  # 上下に少し余白を持たせる
+    canvas_y = vh / 2 - y * (vh / 2 - 20)
 
     if i == 0:
         off_ctx.moveTo(canvas_x, canvas_y)
@@ -60,15 +58,86 @@ for i in range(vw + 1):
 
 off_ctx.stroke()
 
-# ===== 仮想キャンバス → 物理キャンバスに転送 =====
+# ===== スクロール状態管理用の変数 =====
 
-# 物理キャンバスをクリア
-view_ctx.clearRect(0, 0, view_canvas.width, view_canvas.height)
+# 仮想キャンバス上の表示開始位置（sx）
+scroll_x = 0
 
-# drawImage で縮小して転送
-#   引数: (画像, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
-view_ctx.drawImage(
-    off_canvas,
-    0, 0, vw, vh,                      # 仮想キャンバス側（全体）
-    0, 0, view_canvas.width, view_canvas.height  # 物理キャンバス側（全体）
-)
+# ドラッグ中かどうか
+is_dragging = False
+
+# 最後のマウス位置
+last_mouse_x = 0
+
+# 物理キャンバスの幅
+view_w = view_canvas.width
+view_h = view_canvas.height
+
+# ===== 描画関数（現在の scroll_x に基づいて転送） =====
+
+def redraw():
+    global scroll_x
+    # 範囲チェック（オーバースクロール防止）
+    if scroll_x < 0:
+        scroll_x = 0
+    if scroll_x > vw - view_w:
+        scroll_x = vw - view_w
+
+    # 物理キャンバスをクリア
+    view_ctx.clearRect(0, 0, view_w, view_h)
+
+    # 仮想キャンバスの scroll_x〜scroll_x+view_w を表示側に描画
+    view_ctx.drawImage(
+        off_canvas,
+        scroll_x, 0, view_w, vh,    # 仮想キャンバス側
+        0, 0, view_w, view_h        # 物理キャンバス側
+    )
+
+# 初回描画
+redraw()
+
+# ===== マウスイベントハンドラ =====
+
+def on_mousedown(event):
+    global is_dragging, last_mouse_x
+    is_dragging = True
+    # キャンバス内での X 座標（offsetX を使うと楽）
+    last_mouse_x = event.offsetX
+
+def on_mousemove(event):
+    global is_dragging, last_mouse_x, scroll_x
+    if not is_dragging:
+        return
+
+    # 現在の位置
+    current_x = event.offsetX
+    dx = current_x - last_mouse_x
+
+    # 右にドラッグしたら左側に戻るようにしたいので、scroll_x をマイナス方向に動かす
+    scroll_x -= dx
+
+    last_mouse_x = current_x
+
+    redraw()
+
+def on_mouseup(event):
+    global is_dragging
+    is_dragging = False
+
+def on_mouseleave(event):
+    # キャンバス外に出たときもドラッグ終了にする
+    global is_dragging
+    is_dragging = False
+
+# ===== イベントリスナ登録（PyScript / Pyodide 用） =====
+
+# Python 関数を JS コールバック用にラップ
+mousedown_proxy = create_proxy(on_mousedown)
+mousemove_proxy = create_proxy(on_mousemove)
+mouseup_proxy = create_proxy(on_mouseup)
+mouseleave_proxy = create_proxy(on_mouseleave)
+
+view_canvas.addEventListener("mousedown", mousedown_proxy)
+view_canvas.addEventListener("mousemove", mousemove_proxy)
+view_canvas.addEventListener("mouseup", mouseup_proxy)
+view_canvas.addEventListener("mouseleave", mouseleave_proxy)
