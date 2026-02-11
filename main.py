@@ -1,6 +1,6 @@
 import math
 from js import document
-from pyodide import create_proxy
+from pyodide.ffi.wrappers import add_event_listener
 
 # ===== キャンバス取得 =====
 off_canvas = document.getElementById("offscreen")
@@ -98,7 +98,7 @@ def on_mousemove(event):
     current_x = event.offsetX
     dx = current_x - last_mouse_x
 
-    # 右ドラッグで右側を見るようにしたいなら scroll_x を減らす
+    # 右ドラッグで右方向を見るように
     scroll_x -= dx
     last_mouse_x = current_x
 
@@ -117,11 +117,11 @@ def init():
     draw_offscreen()
     redraw()
 
-    # イベント登録（ここでまとめて行う）
-    view_canvas.addEventListener("mousedown", create_proxy(on_mousedown))
-    view_canvas.addEventListener("mousemove", create_proxy(on_mousemove))
-    view_canvas.addEventListener("mouseup", create_proxy(on_mouseup))
-    view_canvas.addEventListener("mouseleave", create_proxy(on_mouseleave))
+    # wrappers.add_event_listener を使うと create_proxy を意識せずに済む
+    add_event_listener(view_canvas, "mousedown", on_mousedown)
+    add_event_listener(view_canvas, "mousemove", on_mousemove)
+    add_event_listener(view_canvas, "mouseup", on_mouseup)
+    add_event_listener(view_canvas, "mouseleave", on_mouseleave)
 
 # スクリプト読み込み時に初期化
 init()
